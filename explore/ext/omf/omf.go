@@ -26,10 +26,9 @@ const (
 type Location int
 const (
 	LocationText Location = iota
-	LocationBegData
 	LocationData
-	LocationStatic
 	LocationConst
+	LocationStatic
 	LocationStack
 	LocationCount
 )
@@ -38,14 +37,12 @@ func (l Location) String() string {
 	switch l {
 	case LocationText:
 		return "CODE"
-	case LocationBegData:
-		return "BEGDATA"
 	case LocationData:
 		return "DATA"
-	case LocationStatic:
-		return "BSS"
 	case LocationConst:
 		return "CONST"
+	case LocationStatic:
+		return "BSS"
 	case LocationStack:
 		return "STACK"
 	default:
@@ -57,14 +54,12 @@ func LocationFromName(name string) (Location, error) {
 	switch name {
 	case "CODE":
 		return LocationText, nil
-	case "BEGDATA":
-		return LocationBegData, nil
-	case "DATA":
+	case "BEGDATA", "DATA":
 		return LocationData, nil
-	case "BSS":
-		return LocationStatic, nil
 	case "CONST":
 		return LocationConst, nil
+	case "BSS":
+		return LocationStatic, nil
 	case "STACK":
 		return LocationStack, nil
 	default:
@@ -116,6 +111,8 @@ func (t RelocationType) String() string {
 
 type Relocation interface {
 	GetType() RelocationType
+	GetName() string
+	GetOffset() uint32
 }
 
 type LocalRelocation struct {
@@ -125,6 +122,14 @@ type LocalRelocation struct {
 
 func (r *LocalRelocation) GetType() RelocationType {
 	return r.Type
+}
+
+func (r *LocalRelocation) GetOffset() uint32 {
+	return r.LocalRef.Offset
+}
+
+func (r *LocalRelocation) GetName() string {
+	return fmt.Sprintf("%s:%q", r.LocalRef.Location, r.LocalRef.Name)
 }
 
 type GlobalRelocation struct {
@@ -137,6 +142,14 @@ func (r *GlobalRelocation) GetType() RelocationType {
 	return r.Type
 }
 
+func (r *GlobalRelocation) GetOffset() uint32 {
+	return r.Offset
+}
+
+func (r *GlobalRelocation) GetName() string {
+	return r.GlobalName
+}
+
 type Segment struct {
 	Name    string
 	Data    []byte
@@ -147,6 +160,16 @@ type Segment struct {
 type Object struct {
 	Name     string
 	Segments [LocationCount]([]*Segment)
+}
+
+func (o *Object) GetSegment(location Location, name string) *Segment {
+	for _, segment := range o.Segments[location] {
+		if segment.Name == name {
+			return segment
+		}
+	}
+
+	return nil
 }
 
 func ParseOmfObject(data []byte) (*Object, int, error) {
@@ -657,24 +680,26 @@ tagLoop:
 	}
 
 	// Remove empty segments
-	for location := Location(0); location < LocationCount; location++ {
-		newSegments := []*Segment{}
-		for _, segment := range object.Segments[location] {
-			if len(segment.Data) > 0 {
-				newSegments = append(newSegments, segment)
-				continue
+	if false {
+		for location := Location(0); location < LocationCount; location++ {
+			newSegments := []*Segment{}
+			for _, segment := range object.Segments[location] {
+				if len(segment.Data) > 0 {
+					newSegments = append(newSegments, segment)
+					continue
+				}
+				if len(segment.Relocs) > 0 {
+					newSegments = append(newSegments, segment)
+					continue
+				}
+				if len(segment.Exports) > 0 {
+					newSegments = append(newSegments, segment)
+					continue
+				}
 			}
-			if len(segment.Relocs) > 0 {
-				newSegments = append(newSegments, segment)
-				continue
-			}
-			if len(segment.Exports) > 0 {
-				newSegments = append(newSegments, segment)
-				continue
-			}
-		}
 
-		object.Segments[location] = newSegments
+			object.Segments[location] = newSegments
+		}
 	}
 
 	return object, i, nil
