@@ -86,3 +86,15 @@ type File struct {
 	Sections []SectionEntry
 	Dwarf    *dwarf.Data
 }
+
+func (f *File) GetSection(name string) *SectionEntry {
+	for i, entry := range f.Sections {
+		if entry.Name != name {
+			continue
+		}
+
+		return &f.Sections[i]
+	}
+
+	return nil
+}
